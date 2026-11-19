@@ -6,7 +6,7 @@ The main session is the chief: it talks, splits work, delegates, and verifies. T
 Do it yourself: reading a file whose path you know, a single grep/glob, a short answer, a single edit at a known location, verifying a worker's output.
 Delegate: multi-file scans, long logs or test output, broad searches, mechanical work suited to a cheap model.
 
-**Who** (definitions live in the plugin's agents/ folder; this is only routing):
+**Who** (definitions live in the plugin's agents/ folder; this is only routing; spawn them as `subagent_type: "agent-crew:<worker>"`):
 - `scout`: search, scanning, output summaries, commands/tests, fully mechanical edits with complete instructions; the default for these. If the result needs interpretation, use `coder`. Do not give judgment work to `scout` (Haiku).
 - `coder`: the default when unsure. Work with a ready plan goes to `coder` no matter how many files; if large, split into layers and give them in parallel.
 - `senior`: only for bugs with an unknown root cause, work `coder` could not accomplish, and broad reviews involving design decisions. Writing the plan is the chief's job.

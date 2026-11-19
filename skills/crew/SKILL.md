@@ -7,10 +7,10 @@ description: Opens the six workers (scout, coder, growth, analyst, browser, test
 
 ## 1. Open
 
-In a single message, in parallel, make six `Agent` calls. In each, `subagent_type` and `name` are the same value:
-`scout`, `coder`, `growth`, `analyst`, `browser`, `tester`.
+In a single message, in parallel, make six `Agent` calls. Plugin agents are namespaced, so in each call `subagent_type` is `agent-crew:<worker>` and `name` is the bare `<worker>`:
+`scout`, `coder`, `growth`, `analyst`, `browser`, `tester` (e.g. `subagent_type: "agent-crew:scout"`, `name: "scout"`).
 
-`senior` (Opus) is not opened with the crew. If the chief rules say it is really needed, the chief opens it at that moment with `subagent_type: "senior"`, `name: "senior"`, and gives later work to it via SendMessage.
+`senior` (Opus) is not opened with the crew. If the chief rules say it is really needed, the chief opens it at that moment with `subagent_type: "agent-crew:senior"`, `name: "senior"`, and gives later work to it via SendMessage.
 
 The same opening instruction goes to each:
 

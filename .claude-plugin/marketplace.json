@@ -9,7 +9,7 @@
       "name": "agent-crew",
       "source": "./",
       "description": "One orchestrator and seven specialized workers (scout, coder, senior, growth, analyst, browser, tester) with cost-aware routing for Claude Code.",
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   ]
 }
