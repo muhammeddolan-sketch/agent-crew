@@ -1,6 +1,6 @@
 {
   "name": "agent-crew",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One orchestrator and seven specialized workers (scout, coder, senior, growth, analyst, browser, tester) with cost-aware routing for Claude Code.",
   "license": "MIT",
   "author": {
