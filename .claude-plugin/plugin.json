@@ -1,0 +1,10 @@
+{
+  "name": "agent-crew",
+  "version": "0.1.0",
+  "description": "One orchestrator and seven specialized workers (scout, coder, senior, growth, analyst, browser, tester) with cost-aware routing for Claude Code.",
+  "license": "MIT",
+  "author": {
+    "name": "muhammeddolan-sketch"
+  },
+  "repository": "https://github.com/muhammeddolan-sketch/agent-crew"
+}
