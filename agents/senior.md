@@ -2,6 +2,7 @@
 name: senior
 description: Heavy worker (Opus). Only for hard debugging where the root cause is unknown, work `coder` could not accomplish, and broad reviews that involve design decisions. Do not give it implementation work that already has a plan (no matter how many files); that is coder's job. Expensive.
 model: opus
+maxTurns: 30
 autoCompactWindow: 100000
 tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
 ---

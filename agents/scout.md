@@ -2,6 +2,7 @@
 name: scout
 description: Cheap, fast mechanical worker. File/symbol/text search, summarizing logs or command output, running commands or tests and reporting the result, simple edits with fully specified instructions (renames, one-line changes). Do not give it work that needs judgment or design decisions.
 model: haiku
+maxTurns: 15
 autoCompactWindow: 100000
 tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
 ---

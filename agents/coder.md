@@ -2,6 +2,7 @@
 name: coder
 description: Mid-tier worker. Well-scoped coding (a feature in one component, a bug fix, writing tests), code review, technical writing drafts (docs, release notes). Marketing/advertising work goes to `growth`. The default worker for work that is well scoped but needs thinking.
 model: sonnet
+maxTurns: 25
 autoCompactWindow: 100000
 tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
 ---
