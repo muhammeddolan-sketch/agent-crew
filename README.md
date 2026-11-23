@@ -83,6 +83,8 @@ node scripts/crew-cost.js --days 7
 
 Tests cover the three guards (standby/brief, scope, repeated dumps) and the ledger, including a replay of a real verifier transcript.
 
+If a `SubagentStop` payload ever fails to resolve to a transcript, set `AGENT_CREW_DEBUG=1`: the raw payload is appended to `hook-debug.jsonl` next to the ledger so the shape can be fixed instead of guessed.
+
 ## Install
 
 ```text
