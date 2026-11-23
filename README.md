@@ -14,11 +14,13 @@ User ──▶ Chief (main session + chief-rules.md via SessionStart)
                   ├──▶ Lazy named worker (first need only, reused via SendMessage)
                   │      scout (15) · coder (25) · senior (30)
                   │      analyst (25, RO) · growth (20) · browser (25, RO)
-                  │      [PreToolUse Node guard blocks git commit/push/reset --hard & rm -rf]
+                  │      [PreToolUse guards: shell guard, brief/standby guard, scope guard]
                   │
-                  └──▶ Independent verifier: tester (20, RO code)
-                         reads git diff + runs tests/build ──▶ PASSED / FAILED / INCONCLUSIVE
+                  └──▶ Independent verifier: tester (12, RO code)
+                         reads the scoped diff + runs tests/build ──▶ PASSED / FAILED / INCONCLUSIVE
 ```
+
+Every worker run is appended to a local ledger (`SubagentStop` hook), so `/crew-cost` can answer "what did this actually cost" with numbers instead of estimates.
 
 ## Workers
 
@@ -27,13 +29,59 @@ User ──▶ Chief (main session + chief-rules.md via SessionStart)
 | `scout` | haiku | 15 | Full (guarded) | Fast search, scanning, log/output summaries, running commands/tests, exact mechanical edits |
 | `coder` | sonnet | 25 | Full (guarded) | Well-scoped coding, bug fixes, tests, code review, technical drafts; default coding worker |
 | `senior` | opus | 30 | Full (guarded) | Hard debugging with unknown root cause, tasks `coder` could not finish, design-heavy reviews |
-| `tester` | sonnet | 20 | Read-only code (`Write`/`Edit` disabled) | Independent verifier: reads `git diff`, runs tests/builds, returns `PASSED` / `FAILED` / `INCONCLUSIVE` |
+| `tester` | sonnet | 12 | Read-only code (`Write`/`Edit` disabled) | Independent verifier: reads the scoped diff, runs tests/builds, returns `PASSED` / `FAILED` / `INCONCLUSIVE` |
 | `analyst` | sonnet | 25 | Strictly read-only (`Write`/`Edit` disabled) | Discovers available DB/analytics/browser MCPs or CLIs, measures metrics, returns report |
 | `growth` | sonnet | 20 | Drafts (`Edit` disabled) | Audience/channel research, campaign calendars, post copy and briefs; prepares, never publishes |
 | `browser` | sonnet | 25 | Read-only code (`Write`/`Edit` disabled) | Interactive web UI work via discovered browser MCPs; stops before irreversible outward actions |
 
-- **Mechanical subagent guard:** A cross-platform Node.js `PreToolUse` hook (`hooks/guard-subagent.js`) intercepts `Bash` and `PowerShell` calls inside subagents and blocks `git commit`, `git push`, `git reset --hard`, and `rm -rf` variants while leaving the main chief session unblocked.
+Every worker also carries a **read budget** in its prompt (≤15 files / ~60k tokens of file content, `grep` before reading, `offset`/`limit` for large files). Hitting the budget means "stop and report what is missing", not "explore more".
+
+### Guards (all fail-open, all individually removable)
+
+| Hook | Event | What it blocks |
+|---|---|---|
+| `hooks/guard-subagent.js` | `PreToolUse: Bash + PowerShell` | `git commit`, `git push`, `git reset --hard`, `rm -rf` inside subagents (chief stays unblocked) |
+| `hooks/guard-spawn.js` | `PreToolUse: Agent` | Standby spawns ("join the crew, just write ready") and briefs missing `Goal:` / `Scope:` / `Done when:` |
+| `hooks/guard-scope.js` | `PreToolUse: Read`, `Bash + PowerShell` | Reads outside the brief's `Scope:`; repeated dump commands (same 600-line `git diff` twice) in read-only workers |
+| `hooks/cost-ledger.js` | `SubagentStop` | Nothing — records one ledger row per worker run |
+
+Escape hatches: add `CREW_BRIEF_EXEMPT` to a spawn prompt to bypass the brief check; omit `Scope:` to disable the scope guard for a worker. Hooks only act on `agent-crew:*` subagents and never block the chief.
+
+## Measured cost
+
+Measured on this plugin's own usage (17–22 Nov 2026, 46 crew runs, 23 of them real work, list prices of 22 Nov 2026):
+
+| Finding | Number |
+|---|---|
+| Crew spend / same tokens on the chief model alone | **$75.99 / $158.14 → 52% saved** |
+| Whole session vs. running everything on the chief model | $249.42 / $331.56 → **25% saved** |
+| Where the crew money went | cache writes **69%** ($52.2), output 14%, cache reads 11% |
+| Cold read per run | ~454k tokens |
+| Idle "standby" spawns | 23 / 46 runs, ~$1.90 |
+| Verifier runs killed by "Autocompact is thrashing" | 5 / 8, ~$5.69 |
+| Cheapest useful worker | `scout`: 51 turns, $0.17 (38× cheaper than the same work on the chief model) |
+
+What the measurement changed: standby spawns are now blocked by a hook, verifiers get a `Scope:` lock and a 12-turn cap, briefs must declare `Goal/Scope/Done when`, and every run lands in the ledger so the next measurement is a command instead of transcript archaeology.
+
+Run it yourself:
+
+```text
+/crew-cost            # last 7 days
+/crew-cost 30         # last 30 days
+```
+
+Ledger: `~/.claude/agent-crew/runs.jsonl` (override with `AGENT_CREW_LEDGER`). Prices live in `hooks/pricing.json`. On a subscription plan the dollar figures are quota equivalents, not a bill.
+
 - **Language rule:** Internal worker → chief reports stay concise English for token efficiency; the chief always responds to you in your language.
+
+## Development
+
+```bash
+node --test tests/hooks.test.js   # 25 unit tests, zero dependencies
+node scripts/crew-cost.js --days 7
+```
+
+Tests cover the three guards (standby/brief, scope, repeated dumps) and the ledger, including a replay of a real verifier transcript.
 
 ## Install
 
@@ -63,23 +111,26 @@ claude --plugin-dir D:\path\to\agent-crew
 3. Follow-up fixes go back to the existing named worker via `SendMessage` instead of paying cold-start spawns.
 4. Chief spawns `tester` (`name: "tester"`) to verify the `git diff` and test suite independently before summarizing in your language.
 
-### Scenario 2: Independent diff verification (`/crew-verify`)
+### Scenario 2: Diff verification (`/crew-verify`)
 
 ```text
-/crew-verify focus on auth error handling and edge cases
+/crew-verify                          # cheap path: chief runs build/tests itself, 0 workers
+/crew-verify --deep focus on auth     # escalate to an independent tester
 ```
 
 1. Inspects `git status` and `git diff --stat` (returns immediately if clean).
-2. Lazily opens or reuses `tester` to review the diff and run relevant tests/typechecks/builds read-only.
-3. Returns a `PASSED` / `FAILED` / `INCONCLUSIVE` verdict with exact command output and `file:line` evidence.
+2. **Quick (default):** the chief runs the project's test/typecheck/lint itself — no worker, no cold context.
+3. **Deep:** opens or reuses `tester` with the changed files as its `Scope:`; the scope guard blocks reads outside it.
+4. Returns a `PASSED` / `FAILED` / `INCONCLUSIVE` verdict with exact command output and `file:line` evidence.
 
-### Scenario 3: Rules & roster check (`/crew`)
+### Scenario 3: Rules, roster & spend (`/crew`, `/crew-cost`)
 
 ```text
 /crew
+/crew-cost 30
 ```
 
-Spawns **0** agents and prints a concise summary of the delegation threshold, worker `maxTurns`, currently open workers in the session, and available commands.
+`/crew` spawns **0** agents and prints the delegation threshold, worker `maxTurns`, open workers, and commands. `/crew-cost` reads the ledger and reports runs, spend, idle spawns, thrash and savings versus the chief model.
 
 ## Customizing with `CLAUDE.md`
 

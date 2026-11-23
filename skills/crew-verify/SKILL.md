@@ -1,27 +1,52 @@
 ---
 name: crew-verify
-description: Runs an independent read-only tester worker against the current git diff (or specified target) and returns a PASSED / FAILED / INCONCLUSIVE report with command and file:line evidence. Use when the user types /crew-verify.
-argument-hint: "[target or focus]"
+description: Verifies the current change cheaply first (chief runs build/tests, 0 workers) and escalates to an independent read-only tester only when the diff or the risk justifies it. Use when the user types /crew-verify.
+argument-hint: "[--quick|--deep] [target or focus]"
 ---
 
 # Crew Verify
 
-Independently verify current changes without modifying product code:
+`$ARGUMENTS` may contain `--quick`, `--deep`, and/or a target (files, commit range, branch) or a behavior focus.
 
-1. **Pre-check (chief):**
-   - Run `git status --short` and `git diff --stat` (plus check `$ARGUMENTS` if the user specified files, a commit/branch diff, or a behavior focus).
-   - If both the working tree and staged index are clean and `$ARGUMENTS` does not name a target, tell the user there are no pending changes to verify (0 subagents spawned).
+## Step 1 — Scope (always, 0 workers)
 
-2. **Lazy `tester` spawn/reuse:**
-   - If `tester` is not yet open in this session, spawn it with `Agent({ subagent_type: "agent-crew:tester", name: "tester", prompt: ... })`.
-   - If `tester` is already open, reuse it via `SendMessage({ to: "tester", message: ... })`.
+- Run `git status --short` and `git diff --stat` (plus the staged diff if anything is staged).
+- If the tree is clean and no target is given: say there is nothing to verify and stop.
+- Collect the changed file list — this becomes `Scope:` later.
 
-3. **Verification brief:**
-   Give `tester` a self-contained English brief containing:
-   - What changed (changed files from `git status`/`git diff --stat`, plus any user goal or `$ARGUMENTS` focus).
-   - Instructions to read the full diff (`git diff` / `git diff --cached` / target files), check `CLAUDE.md` (if present) for project test/typecheck/build commands, run relevant verification commands, check edge cases, and report any missing test coverage as a gap without editing files (`Write`/`Edit` are disabled).
-   - Expected report format: `PASSED` / `FAILED` / `INCONCLUSIVE`, exact commands and output lines, `file:line` error locations, and any untested areas.
+## Step 2 — Quick verification (default)
 
-4. **User Report:**
-   - Present the `tester` verdict and supporting evidence clearly to the user in the **user's language**.
-   - Never claim `PASSED` if `tester` reported failures or inconclusive/unrun checks.
+Run the mechanical checks **yourself**; do not spawn a worker for this:
+
+1. Find the project's commands from `CLAUDE.md` / `AGENTS.md`, else infer: `package.json` scripts (`test`, `typecheck`, `lint`), `go test ./...`, `cargo test`, `pytest`, `dotnet test`.
+2. Run the narrowest set that covers the change, piping output (`2>&1 | tail -40`).
+3. Report `PASSED` / `FAILED` with the exact commands and the relevant output lines.
+
+This is the correct path for most changes and costs no worker tokens.
+
+## Step 3 — Escalate to `--deep` when any of these is true
+
+- a quick check failed,
+- the diff is larger than ~200 lines,
+- the change touches a risk area: auth/session, money/payments, data deletion or migration, concurrency, protocol/wire format, permissions.
+
+Also go deep when the user passed `--deep` explicitly. Say which trigger fired.
+
+## Step 4 — Deep verification (independent `tester`)
+
+- Reuse the open `tester` via `SendMessage({ to: "tester", message: ... })`; spawn it only if it is not open.
+- The brief must contain the three required lines and nothing vague:
+
+```text
+Goal: independently verify <what changed> against <the requested behavior>.
+Scope: <changed files from step 1, one per line, <= 10 entries>
+Done when: return PASSED / FAILED / INCONCLUSIVE with command output and file:line evidence.
+```
+
+- Also pass: the user's `$ARGUMENTS` focus, the exact commands from step 2, and "read-only, do not edit".
+- The scope guard blocks reads outside `Scope:`; if `tester` reports it needs another file, widen `Scope:` and send it back rather than letting it explore.
+
+## Step 5 — Report
+
+- Present the verdict and evidence in the **user's language**.
+- Never claim `PASSED` when a check failed or was not run. Name what stayed untested.

@@ -1,0 +1,19 @@
+{
+  "updated": "2026-11-22",
+  "currency": "USD",
+  "unit": "per_million_tokens",
+  "note": "List prices, no batch discount. cacheWrite = 1.25x input, cacheRead = 5% of input.",
+  "models": {
+    "claude-opus-5-5": { "in": 4, "out": 20, "cacheWrite": 5, "cacheRead": 0.2 },
+    "claude-opus-5": { "in": 5, "out": 25, "cacheWrite": 6.25, "cacheRead": 0.25 },
+    "claude-opus-4-8": { "in": 5, "out": 25, "cacheWrite": 6.25, "cacheRead": 0.25 },
+    "claude-opus-4-1": { "in": 15, "out": 75, "cacheWrite": 18.75, "cacheRead": 1.5 },
+    "claude-sonnet-5-5": { "in": 2, "out": 10, "cacheWrite": 2.5, "cacheRead": 0.1 },
+    "claude-sonnet-5": { "in": 3, "out": 15, "cacheWrite": 3.75, "cacheRead": 0.3 },
+    "claude-haiku-5-5": { "in": 0.1, "out": 0.5, "cacheWrite": 0.125, "cacheRead": 0.01 },
+    "claude-haiku-4-5": { "in": 1, "out": 5, "cacheWrite": 1.25, "cacheRead": 0.5 },
+    "claude-fable-5-2": { "in": 10, "out": 50, "cacheWrite": 12.5, "cacheRead": 0.5 },
+    "claude-fable-5-1": { "in": 10, "out": 50, "cacheWrite": 12.5, "cacheRead": 0.5 }
+  },
+  "fallback": { "in": 4, "out": 20, "cacheWrite": 5, "cacheRead": 0.2 }
+}

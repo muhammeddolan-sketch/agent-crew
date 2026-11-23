@@ -1,47 +1,60 @@
 ---
 name: crew
-description: Cost-aware chief orchestration for a task (/crew <task>) with lazy on-demand named workers and SendMessage reuse, or status/rules summary when invoked without arguments (/crew). Use when the user types /crew.
+description: Cost-aware chief orchestration for a task (/crew <task>) with lazy on-demand named workers and SendMessage reuse, or a status/rules summary without spawning anyone (/crew). Use when the user types /crew.
 argument-hint: "[task]"
 ---
 
 # Crew Orchestrator
 
-Check `$ARGUMENTS`:
+Check `$ARGUMENTS`.
 
-## Mode A — Argumentless (`/crew`, when `$ARGUMENTS` is empty)
+## Mode A — Argumentless (`/crew`, `$ARGUMENTS` empty)
 
-Do **not** spawn any subagents (`0` `Agent` calls). Present a concise summary in the **user's language**:
+Spawn **zero** subagents. Present a concise summary in the **user's language**:
 
-1. **Delegation threshold:** Small/single-step tasks stay with the chief directly; subagents are opened lazily only when warranted (broad scans, multi-file work, verification, browser/analytics/growth).
-2. **Workers & `maxTurns`:**
-   - `scout` (haiku, 15) · `coder` (sonnet, 25) · `senior` (opus, 30) · `tester` (sonnet, 20, read-only code) · `analyst` (sonnet, 25, strictly read-only) · `growth` (sonnet, 20) · `browser` (sonnet, 25, read-only code)
-3. **Session state:** List any named workers already open in this conversation (or note none are open yet).
-4. **Commands:** `/crew <task>` to orchestrate a task end-to-end; `/crew-verify [target]` to run independent `tester` verification on the current `git diff`.
+1. **Delegation threshold:** under ~5 tool calls or ~3 files the chief does the work itself; workers are opened only for broad scans, multi-file work, verification, or browser/analytics/growth.
+2. **Workers & `maxTurns`:** `scout` (haiku, 15) · `coder` (sonnet, 25) · `senior` (opus, 30) · `tester` (sonnet, 12, read-only code) · `analyst` (sonnet, 25, strictly read-only) · `growth` (sonnet, 20) · `browser` (sonnet, 25, read-only code).
+3. **Session state:** list the named workers already open in this conversation, or say none are open.
+4. **Cost note:** an idle standby spawn still pays for a cold context (~$0.08); that is why workers open with their first real task. See `/crew-cost` for this project's actual spend.
+5. **Commands:** `/crew <task>` to orchestrate; `/crew-verify [--quick|--deep]` to verify the current diff; `/crew-cost [days]` for the spend ledger.
 
----
+## Mode B — Task Orchestration (`/crew <task>`)
 
-## Mode B — Task Orchestration (`/crew <task>`, when `$ARGUMENTS` is non-empty)
+### 1. Quick discovery
 
-### 1. Quick Discovery
-- Run 1–2 targeted greps/globs yourself first.
-- If the codebase scan is broad or output-heavy, lazily open `scout` (`subagent_type: "agent-crew:scout"`, `name: "scout"`) to map the relevant files and report back.
+- Run 1-2 targeted greps/globs yourself.
+- If the area is broad (> ~5 unknown files), open `scout` **with the mapping task as its brief** (not with "join the crew") to produce `path:line — what — why`. Reuse that map as `Start:` for `coder`.
 
 ### 2. Plan
-- Write a short, concrete execution plan: target files, step order, which worker handles each part, file-boundary split (if parallel), and what `tester` will verify.
-- Check the project's `CLAUDE.md` (if present) for custom test/build commands or delegation overrides.
 
-### 3. Lazy On-Demand Delegation
-- **Never open workers upfront.** Spawn each needed worker only on its first task using `Agent` with `subagent_type: "agent-crew:<worker>"` and `name: "<worker>"`.
-- **Reuse via `SendMessage`:** For follow-up tasks on the same role, call `SendMessage({ to: "<worker>", message: ... })` instead of spawning a new worker.
-- **Self-contained briefs:** Every prompt/message must include the goal, full file paths, constraints, expected English short report format, and a clear "stop when done" criterion (respecting the worker's `maxTurns`).
-- **Parallel strategy (default = file-boundary split):** Send independent tasks in parallel in one message, partitioned strictly by file boundary so two workers never edit the same file. Only use `isolation: "worktree"` as an optional fallback for large refactors with high file-collision risk. Run dependent steps sequentially.
-- **Busy-worker fallback:** If a named worker is mid-task and an independent parallel task arrives for the same role, spawn a temporary unnamed agent of that `subagent_type`.
+- Short, concrete plan: target files, order, which worker does what, file-boundary split for parallel work, and what verification will run.
+- Check the project's `CLAUDE.md` for test/build commands and delegation overrides.
 
-### 4. Independent Verification
-- After behavior-changing or multi-file code changes, lazily spawn `tester` (`subagent_type: "agent-crew:tester"`, `name: "tester"`) or reuse it via `SendMessage({ to: "tester", message: ... })`.
-- Have `tester` inspect the diff, run relevant tests/builds/checks read-only, and return `PASSED` / `FAILED` / `INCONCLUSIVE` with command and `file:line` evidence.
-- For trivial single-line, comment, or config-only edits, verify directly with diff + command.
+### 3. Lazy delegation with a contract
 
-### 5. Summary & Hygiene
-- Present the final result and verification evidence to the user in the **user's language**.
-- Workers auto-compact around 100K tokens (`autoCompactWindow`); continue reusing open named workers with self-contained briefs. Suggest `/clear` when the topic finishes.
+Every `Agent` prompt for `agent-crew:*` must contain:
+
+```text
+Goal: <one sentence>
+Scope: <files/dirs/globs, <= 10 entries>
+Done when: <command or check>
+Read budget: <= 15 files, <= 60k tokens; grep before reading; stop and report if exceeded.
+```
+
+A `PreToolUse` hook rejects briefs missing these and rejects standby spawns. Add `Start: path:line` when you know where work begins.
+
+- **Reuse before spawn:** follow-up work goes to the open worker via `SendMessage`. A warm worker reads its cache at 1/25 of the write price.
+- **Parallel:** at most 2 workers, partitioned strictly by file boundary. `isolation: "worktree"` only for large high-collision refactors.
+- **Busy worker:** if the named worker is mid-task and an independent parallel task arrives, spawn a temporary worker of that type — with a full brief.
+
+### 4. Verification
+
+- Run the mechanical checks yourself first (`/crew-verify` quick path): build, tests, typecheck, lint.
+- Escalate to `tester` only when a check is red, the diff is > ~200 lines, or the change is risky (auth, money, data, concurrency, protocol, migrations). Its brief needs `Scope:` with the changed files.
+- For trivial single-line, comment, or config edits, the diff plus one command is enough.
+
+### 5. Summary & hygiene
+
+- Present the result and the verification evidence in the **user's language**.
+- Keep open workers for related follow-ups instead of re-spawning; suggest `/clear` when the topic ends.
+- If the user asks what this cost, run `/crew-cost`.
